@@ -1,0 +1,5 @@
+This is an implementation of the bsdiff binary diff method. This implementation differs in the following from the original implementation:
+- It's a library.
+- It consumes and outputs memory buffers instead of files directly.
+
+see http://www.daemonology.net/bsdiff/ for the original implementation and notes from the author.
