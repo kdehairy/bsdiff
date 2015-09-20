@@ -3,3 +3,5 @@ This is an implementation of the bsdiff binary diff method. This implementation 
 - It consumes and outputs memory buffers instead of files directly.
 
 see http://www.daemonology.net/bsdiff/ for the original implementation and notes from the author.
+
+This is still an un-polished work. The interfacing with the library is not to my liking yet.
