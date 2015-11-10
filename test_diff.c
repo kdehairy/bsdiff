@@ -54,6 +54,13 @@ void testDiff(const char *baseFile, const char *variantFile, const char *patchFi
         return;
     }
 
+    fvariant = fopen(variantFile, "r");
+
+    if (fvariant == NULL) {
+        fprintf(stderr, "Failed to open variant file\n");
+        return;
+    }
+
     // get base size
     if (fseek(fbase, 0, SEEK_END) != 0) {
         goto fail;
@@ -73,13 +80,6 @@ void testDiff(const char *baseFile, const char *variantFile, const char *patchFi
     fread(base, sizeof(uint8_t), baseSize, fbase);
     fclose(fbase);
     fbase = NULL;
-
-    fvariant = fopen(variantFile, "r");
-
-    if (fvariant == NULL) {
-        fprintf(stderr, "Failed to open variant file\n");
-        return;
-    }
 
     //get variant size
     if (fseek(fvariant, 0, SEEK_END) != 0) {
