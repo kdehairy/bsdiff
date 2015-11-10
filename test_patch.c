@@ -57,6 +57,11 @@ void testPatch(const char *baseFile, const char *variantFile, const char *patchF
 
     fpatch = fopen(patchFile, "r");
 
+    if (fpatch == NULL) {
+        fprintf(stderr, "Failed to open patch file\n");
+        return;
+    }
+
     // get patch size
     if (fseek(fpatch, 0, SEEK_END) != 0) {
         goto fail;
