@@ -4,105 +4,116 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "test_patch.h"
 #include "bspatch.h"
 
 
-static void initStream(PatchStream *stream, size_t variantSize) {
+static void initStream( PatchStream *stream, size_t variantSize ) {
 
 }
 
-static size_t writeStream(PatchStream *stream, const void *buff, size_t size) {
-    FILE *fvariant = (FILE *) stream->opaque;
-    fwrite(buff, sizeof(uint8_t), size, fvariant);
-    return size;
+static size_t writeStream( PatchStream *stream, const void *buff,
+		size_t size ) {
+	FILE *fvariant = (FILE *) stream->opaque;
+	fwrite( buff, sizeof( uint8_t ), size, fvariant );
+	return size;
 }
 
-static void endStream(PatchStream *stream) {
+static void endStream( PatchStream *stream ) {
 
 }
 
-void testPatch(const char *baseFile, const char *variantFile, const char *patchFile) {
-    uint8_t *base = NULL;
-    size_t baseSize;
-    uint8_t *patch = NULL;
-    size_t patchSize;
+static int getFileStartLength( int fd, off_t *start, size_t *length ) {
+	off_t start_, end_;
+	size_t length_;
 
-    off_t result;
+	start_ = lseek( fd, 0L, SEEK_CUR );
+	end_ = lseek( fd, 0L, SEEK_END );
+	(void) lseek( fd, start_, SEEK_SET );
 
-    FILE *fbase = NULL;
-    FILE *fpatch = NULL;
-    FILE *fvariant = NULL;
+	if ( start_ == (off_t) -1 || end_ == (off_t) -1 ) {
+		return -1;
+	}
 
-    fbase = fopen(baseFile, "r");
+	length_ = end_ - start_;
+	if ( length_ == 0 ) {
+		return -1;
+	}
 
-    //get baseSize
-    if (fseek(fbase, 0, SEEK_END) != 0) {
-        goto fail;
-    }
-    result = ftello(fbase);
-    if (result == -1) {
-        goto fail;
-    }
-    baseSize = (size_t) result;
+	*start = start_;
+	*length = length_;
 
-    // allocate base buffer
-    base = (uint8_t *) malloc(baseSize + 1);
-    if (fseek(fbase, 0, SEEK_SET) != 0) {
-        goto fail;
-    }
-    fread(base, sizeof(uint8_t), baseSize, fbase);
-    fclose(fbase);
-    fbase = NULL;
+	return 0;
+}
 
-    fpatch = fopen(patchFile, "r");
+void testPatch( const char *baseFile, const char *variantFile,
+		const char *patchFile ) {
+	uint8_t *base = NULL;
+	size_t baseSize;
+	uint8_t *patch = NULL;
+	size_t patchSize;
 
-    if (fpatch == NULL) {
-        fprintf(stderr, "Failed to open patch file\n");
-        return;
-    }
+	FILE *fvariant = NULL;
 
-    // get patch size
-    if (fseek(fpatch, 0, SEEK_END) != 0) {
-        goto fail;
-    }
-    result = ftello(fpatch);
-    if (result == -1) {
-        goto fail;
-    }
-    patchSize = (size_t) result;
+	int base_fd = open( baseFile, O_RDONLY );
+	if ( base_fd < 0 ) {
+		goto fail;
+	}
 
-    // allocate patch buffer
-    patch = (uint8_t *) malloc(patchSize);
-    fseek(fpatch, 0, SEEK_SET);
-    fread(patch, sizeof(uint8_t), patchSize, fpatch);
-    fclose(fpatch);
-    fpatch = NULL;
+	//mmap the base file
+	off_t base_start;
+	if ( getFileStartLength( base_fd, &base_start, &baseSize )) {
+		goto fail;
+	}
+	base = mmap(NULL, baseSize, PROT_READ, MAP_PRIVATE, base_fd, base_start );
+	if ( base == MAP_FAILED) {
+		goto fail;
+	}
 
-    fvariant = fopen(variantFile, "w");
+	int patch_fd = open( patchFile, O_RDONLY );
+	if ( patch_fd < 0 ) {
+		fprintf( stderr, "Failed to open patch file\n" );
+		goto fail;
+	}
 
-    PatchStream stream;
-    stream.write = writeStream;
-    stream.init = initStream;
-    stream.end = endStream;
-    stream.opaque = fvariant;
+	//mmap the patch file
+	off_t patch_start;
+	if ( getFileStartLength( patch_fd, &patch_start, &patchSize )) {
+		goto fail;
+	}
+	patch = mmap(NULL, patchSize, PROT_READ, MAP_PRIVATE, patch_fd,
+			patch_start );
+	if ( patch == MAP_FAILED) {
+		goto fail;
+	}
 
-    bspatch(base, baseSize, patch, patchSize, &stream);
+	fvariant = fopen( variantFile, "w" );
 
-    fclose(fvariant);
-    fvariant = NULL;
+	PatchStream stream;
+	stream.write = writeStream;
+	stream.init = initStream;
+	stream.end = endStream;
+	stream.opaque = fvariant;
 
-    fail:
-    if (fbase != NULL) {
-        fclose(fbase);
-    }
-    if (base != NULL) {
-        free(base);
-    }
-    if (patch != NULL) {
-        free(patch);
-    }
-    if (fpatch != NULL) {
-        fclose(fpatch);
-    }
+	bspatch( base, baseSize, patch, patchSize, &stream );
+
+	fclose( fvariant );
+
+	fail:
+	if ( base_fd >= 0 ) {
+		close( base_fd );
+	}
+	if ( base != NULL) {
+		munmap( base, baseSize );
+	}
+
+	if ( patch != NULL) {
+		munmap( patch, patchSize );
+	}
+	if ( patch_fd >= 0 ) {
+		close( patch_fd );
+	}
 }
